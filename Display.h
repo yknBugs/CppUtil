@@ -26,7 +26,7 @@ struct COORD
 class Display
 {
 private:
-    static std::mutex mtx; 
+    static std::mutex mtx;
     static COORD cursorPosition;
     static std::string cursorColor;
     std::chrono::system_clock::time_point startTime;
@@ -40,7 +40,7 @@ private:
 
     // Evaluate the input from different platforms
     static bool inputIsEnter(const std::vector<char>& input);
-    static bool inputIsBackspace(const std::vector<char>& input); 
+    static bool inputIsBackspace(const std::vector<char>& input);
     static bool inputIsLeftArrow(const std::vector<char>& input);
     static bool inputIsRightArrow(const std::vector<char>& input);
     static bool inputIsUpArrow(const std::vector<char>& input);

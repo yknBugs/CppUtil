@@ -8,7 +8,7 @@ char Display::c()
 {
     std::lock_guard<std::mutex> lock(mtx);
 #ifdef _WIN32
-    return (char) _getch();
+    return (char)_getch();
 #else
     std::cout.flush();
     char buf = 0;
@@ -45,7 +45,7 @@ void Display::changeCursor(char c)
         cursorPosition.X = 0;
         cursorPosition.Y++;
     }
-    else if (c == '\r') 
+    else if (c == '\r')
     {
         cursorPosition.X = 0;
     }
@@ -56,7 +56,7 @@ void Display::changeCursor(char c)
     else if (c == '\t')
     {
         cursorPosition.X++;
-		while (cursorPosition.X % 8 != 0)
+        while (cursorPosition.X % 8 != 0)
         {
             cursorPosition.X++;
         }
@@ -397,10 +397,10 @@ bool Display::setTextColor(char colorCode)
     {
         return false;
     }
-    std::string colorCodeColor[16] = {"12;12;12", "0;55;218", "19;161;14", "58;150;221", 
-                                    "197;15;31", "136;23;152", "193;156;0", "204;204;204", 
-                                    "118;118;118", "54;120;255", "22;198;12", "97;214;214", 
-                                    "231;72;86", "180;0;158", "249;241;165", "242;242;242"};
+    std::string colorCodeColor[16] = { "12;12;12", "0;55;218", "19;161;14", "58;150;221",
+                                    "197;15;31", "136;23;152", "193;156;0", "204;204;204",
+                                    "118;118;118", "54;120;255", "22;198;12", "97;214;214",
+                                    "231;72;86", "180;0;158", "249;241;165", "242;242;242" };
     std::cout << "\033[38;2;" << colorCodeColor[color] << "m";
 #endif
     std::lock_guard<std::mutex> lock(mtx);
@@ -649,7 +649,7 @@ void Display::showText(const std::string& text)
 
 void Display::showText(const std::string& text, const std::vector<std::string>& parameters)
 {
-    std::size_t bufferSize = text.size() + 2;
+    size_t bufferSize = text.size() + 2;
     char* buffer = new char[bufferSize];
     memset(buffer, '\0', bufferSize);
 
@@ -673,9 +673,9 @@ void Display::showText(const std::string& text, const std::vector<std::string>& 
             }
             else
             {
-                this->print("#");   
+                this->print("#");
             }
-            parameterIndex++;   
+            parameterIndex++;
         }
         else
         {
@@ -728,20 +728,20 @@ void Display::showText(const std::string& text1, double parameter, const std::st
 int Display::getInputInt(int max, bool canBelowZero)
 {
     bool isBelowZero = false;
-	int result = 0;
-	int length = 0;
-	int maxLength = 0;
-	int temp = 0;
-	std::vector<char> cstr;
+    int result = 0;
+    int length = 0;
+    int maxLength = 0;
+    int temp = 0;
+    std::vector<char> cstr;
     COORD position = getCursorPosition();
 
     // Get the maximum length of the input
     temp = max;
     while (temp != 0)
-	{
-		maxLength++;
-		temp /= 10;
-	}
+    {
+        maxLength++;
+        temp /= 10;
+    }
 
     // Get the input
     cstr = getInput();
@@ -752,12 +752,12 @@ int Display::getInputInt(int max, bool canBelowZero)
         {
             // Handle backspace
             if (length > 0)
-			{
+            {
                 // Delete Digit
-				length--;
-				result = result / 10;
-				std::cout << '\b' << ' ' << '\b';
-			}
+                length--;
+                result = result / 10;
+                std::cout << '\b' << ' ' << '\b';
+            }
             else if (length == 0 && isBelowZero == true)
             {
                 // Delete minus sign
@@ -780,9 +780,9 @@ int Display::getInputInt(int max, bool canBelowZero)
                 this->clear(length, position);
                 setCursorPosition(position);
                 if (isBelowZero == true)
-				{
-					std::cout << -max;
-				}
+                {
+                    std::cout << -max;
+                }
                 else
                 {
                     std::cout << max;
@@ -945,7 +945,7 @@ double Display::getInputDouble(bool canBelowZero, bool acceptNaN, size_t maxLeng
             if (hasDot)
             {
                 decResult /= 10;
-                result = result + ((double) c - '0') * decResult;
+                result = result + ((double)c - '0') * decResult;
             }
             else
             {
@@ -1022,7 +1022,7 @@ std::string Display::getInputString(size_t minLength, size_t maxLength)
                 length += 4;
                 cursorIndex += 4;
                 lastVisibleLength = previewGetInputString(position, color, result, cursorIndex, lastVisibleLength);
-            }   
+            }
         }
         else if (inputIsLeftArrow(cstr))
         {
@@ -1087,7 +1087,7 @@ std::string Display::getInputString(size_t minLength, size_t maxLength)
             for (int i = 0; i < cstr.size(); i++)
             {
                 result.insert(cursorIndex, 1, cstr[i]);
-                asciiLabel.insert(cursorIndex, 1, '0' + cstr.size());
+                asciiLabel.insert(cursorIndex, 1, '0' + (char)cstr.size());
                 length++;
                 cursorIndex++;
             }
@@ -1150,9 +1150,9 @@ std::vector<int> Display::hexToColor(std::string hex)
                 color[i] = std::stoi(hex.substr(i * 2, 2), nullptr, 16);
             }
         }
-        catch(...)
+        catch (...)
         {
-            return {-1, -1, -1};
+            return { -1, -1, -1 };
         }
         return color;
     }
@@ -1167,14 +1167,14 @@ std::vector<int> Display::hexToColor(std::string hex)
                 color[i] = std::stoi(hex.substr(i, 1), nullptr, 16) * 17;
             }
         }
-        catch(...)
+        catch (...)
         {
-            return {-1, -1, -1};
+            return { -1, -1, -1 };
         }
         return color;
     }
 
-    return {-1, -1, -1};
+    return { -1, -1, -1 };
 }
 
 std::string Display::colorToHex(int red, int green, int blue)
@@ -1258,6 +1258,6 @@ double Display::getDurationSeconds()
 {
     std::chrono::system_clock::time_point endTime = std::chrono::system_clock::now();
     std::chrono::nanoseconds spendTime = std::chrono::duration_cast<std::chrono::nanoseconds>(endTime - this->startTime);  // 1e-9 seconds
-    double result = (double) spendTime.count() * std::chrono::nanoseconds::period::num / std::chrono::nanoseconds::period::den;
+    double result = (double)spendTime.count() * std::chrono::nanoseconds::period::num / std::chrono::nanoseconds::period::den;
     return result;
 }
