@@ -3,6 +3,7 @@
 std::mutex Display::mtx;
 COORD Display::cursorPosition = { 0, 0 };
 std::string Display::cursorColor = "r";
+int Display::specialCharCursor = 0;
 
 char Display::c()
 {
@@ -42,19 +43,23 @@ void Display::changeCursor(char c)
     std::lock_guard<std::mutex> lock(mtx);
     if (c == '\n')
     {
+        specialCharCursor = 0;
         cursorPosition.X = 0;
         cursorPosition.Y++;
     }
     else if (c == '\r')
     {
+        specialCharCursor = 0;
         cursorPosition.X = 0;
     }
     else if (c == '\b')
     {
+        specialCharCursor = 0;
         cursorPosition.X--;
     }
     else if (c == '\t')
     {
+        specialCharCursor = 0;
         cursorPosition.X++;
         while (cursorPosition.X % 8 != 0)
         {
@@ -63,10 +68,20 @@ void Display::changeCursor(char c)
     }
     else if (c == '\0')
     {
+        specialCharCursor = 0;
         return;
+    }
+    else if (c < 0)
+    {
+        specialCharCursor++;
+        if (specialCharCursor % 3 != 0)
+        {
+            cursorPosition.X++;
+        }
     }
     else
     {
+        specialCharCursor = 0;
         cursorPosition.X++;
     }
     // Warning: Unknown Characters may exist

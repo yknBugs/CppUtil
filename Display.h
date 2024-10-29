@@ -29,6 +29,7 @@ private:
     static std::mutex mtx;
     static COORD cursorPosition;
     static std::string cursorColor;
+    static int specialCharCursor;
     std::chrono::system_clock::time_point startTime;
 
     static char c();
