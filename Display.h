@@ -4,10 +4,10 @@
 #include <cstring>
 #include <sstream>
 #include <vector>
-#include <random>
 #include <chrono>
 #include <cmath>
 #include <iomanip>
+#include <mutex>
 #ifdef _WIN32
 #include <conio.h>
 #include <Windows.h>
@@ -22,13 +22,11 @@ struct COORD
 #endif
 
 // This class is platform-independent, but for best performance, it is recommended to use it on Windows
+// Even we tried to make it thread-safe, it is recommended to lock the instance in a multi-thread environment
 class Display
 {
 private:
-#ifndef _WIN32
-    // None windows platform must clear the console the first time this class is initialized because we cannot get the cursor position
-    static size_t initCount;
-#endif
+    static std::mutex mtx; 
     static COORD cursorPosition;
     static std::string cursorColor;
     std::chrono::system_clock::time_point startTime;

@@ -1,13 +1,12 @@
 #include "Display.h"
 
-#ifndef _WIN32
-size_t Display::initCount = 0;
-#endif
+std::mutex Display::mtx;
 COORD Display::cursorPosition = { 0, 0 };
 std::string Display::cursorColor = "r";
 
 char Display::c()
 {
+    std::lock_guard<std::mutex> lock(mtx);
 #ifdef _WIN32
     return (char) _getch();
 #else
@@ -40,6 +39,7 @@ char Display::c()
 void Display::changeCursor(char c)
 {
     // Note: This functions is platform-independent, but it may not be accurate
+    std::lock_guard<std::mutex> lock(mtx);
     if (c == '\n')
     {
         cursorPosition.X = 0;
@@ -89,6 +89,7 @@ bool Display::updateCursorPosition()
     CONSOLE_SCREEN_BUFFER_INFO csbi;
     if (GetConsoleScreenBufferInfo(GetStdHandle(STD_OUTPUT_HANDLE), &csbi))
     {
+        std::lock_guard<std::mutex> lock(mtx);
         cursorPosition.X = csbi.dwCursorPosition.X;
         cursorPosition.Y = csbi.dwCursorPosition.Y;
         return true;
@@ -307,6 +308,25 @@ int Display::previewGetInputString(COORD originalPosition, std::string originalC
             x++;
         }
     }
+
+#ifndef _WIN32
+    // In Linux, Unicode characters have 3 values but take only 2 character spaces
+    i = 0;
+    while (inputString[i] != '\0')
+    {
+        if (inputString[i] < 0)
+        {
+            if (i < cursorIndex)
+            {
+                x--;
+            }
+            visibleLength--;
+            i += 2;
+        }
+        i++;
+    }
+#endif
+
     for (int i = 0; i < lastVisibleLength - visibleLength; i++)
     {
         std::cout << ' ';
@@ -318,14 +338,6 @@ int Display::previewGetInputString(COORD originalPosition, std::string originalC
 Display::Display()
 {
     this->startTime = std::chrono::system_clock::now();
-#ifndef _WIN32
-    // Clear the console the first time this class is initialized because we cannot get the cursor position
-    if (initCount == 0)
-    {
-        std::cout << "\033[2J\033[1;1H";
-    }
-    initCount++;
-#endif
     this->updateCursorPosition();
 }
 
@@ -333,7 +345,6 @@ Display::~Display()
 {
     // Reset the color
     setTextColor('r');
-    cursorColor = "r";
 }
 
 bool Display::setTextColor(char colorCode)
@@ -378,6 +389,7 @@ bool Display::setTextColor(char colorCode)
     else if (colorCode == 'r' || colorCode == 'R')
     {
         std::cout << "\033[0m";
+        std::lock_guard<std::mutex> lock(mtx);
         cursorColor = std::string(1, colorCode);
         return true;
     }
@@ -391,6 +403,7 @@ bool Display::setTextColor(char colorCode)
                                     "231;72;86", "180;0;158", "249;241;165", "242;242;242"};
     std::cout << "\033[38;2;" << colorCodeColor[color] << "m";
 #endif
+    std::lock_guard<std::mutex> lock(mtx);
     cursorColor = std::string(1, colorCode);
     return true;
 }
@@ -404,6 +417,7 @@ bool Display::setTextColor(int red, int green, int blue)
     }
     // \033[38;2;<r>;<g>;<b>m<text>\033[0m
     std::cout << "\033[38;2;" << red << ";" << green << ";" << blue << "m";
+    std::lock_guard<std::mutex> lock(mtx);
     cursorColor = colorToHex(red, green, blue);
     return true;
 }
@@ -502,6 +516,8 @@ std::vector<char> Display::getInput()
 
 void Display::clear()
 {
+    setTextColor('r');
+    std::lock_guard<std::mutex> lock(mtx);
     cursorPosition.X = 0;
     cursorPosition.Y = 0;
 #ifdef _WIN32
@@ -510,8 +526,6 @@ void Display::clear()
 #else
     std::cout << "\033[2J\033[1;1H";
 #endif
-    setTextColor('r');
-    cursorColor = "r";
 }
 
 void Display::clear(size_t length, COORD position, char c, bool freezeCursor)
@@ -794,8 +808,7 @@ int Display::getInputInt(int max, bool canBelowZero)
     }
 
     std::cout << '\n';
-    cursorPosition.X = 0;
-    cursorPosition.Y++;
+    setCursorPosition(0, position.Y + 1);
     updateCursorPosition();
     if (isBelowZero == true)
     {
@@ -811,6 +824,7 @@ double Display::getInputDouble(bool canBelowZero, bool acceptNaN, size_t maxLeng
     bool isNaN = false;
     int length = 0;
     std::vector<char> cstr;
+    COORD position = getCursorPosition();
     double result = 0.0;
     double decResult = 1.0;
     std::vector<char> input;
@@ -956,8 +970,7 @@ double Display::getInputDouble(bool canBelowZero, bool acceptNaN, size_t maxLeng
     }
 
     std::cout << '\n';
-    cursorPosition.X = 0;
-    cursorPosition.Y++;
+    setCursorPosition(0, position.Y + 1);
     updateCursorPosition();
     return result;
 }
@@ -1083,9 +1096,9 @@ std::string Display::getInputString(size_t minLength, size_t maxLength)
         cstr = getInput();
     }
 
+    previewGetInputString(position, color, result, -10, lastVisibleLength);
     std::cout << '\n';
-    cursorPosition.X = 0;
-    cursorPosition.Y++;
+    setCursorPosition(0, position.Y + 1);
     setTextColor(color);
     updateCursorPosition();
     return result;
@@ -1190,6 +1203,7 @@ std::string Display::colorToHex(const std::vector<int>& color)
 
 void Display::setCursorPosition(short x, short y)
 {
+    std::lock_guard<std::mutex> lock(mtx);
     cursorPosition.X = x;
     cursorPosition.Y = y;
 #ifdef _WIN32
@@ -1211,6 +1225,7 @@ COORD Display::getCursorPosition()
     CONSOLE_SCREEN_BUFFER_INFO csbi;
     if (GetConsoleScreenBufferInfo(GetStdHandle(STD_OUTPUT_HANDLE), &csbi))
     {
+        std::lock_guard<std::mutex> lock(mtx);
         cursorPosition.X = csbi.dwCursorPosition.X;
         cursorPosition.Y = csbi.dwCursorPosition.Y;
     }
@@ -1230,6 +1245,7 @@ int Display::getCursorPositionY()
 
 std::string Display::getCursorColor()
 {
+    std::lock_guard<std::mutex> lock(mtx);
     return cursorColor;
 }
 
