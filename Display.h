@@ -91,6 +91,8 @@ public:
     static std::vector<std::string> vInt2vString(const std::vector<int>& vInt);
     static std::vector<std::string> vDouble2vString(const std::vector<double>& vDouble, unsigned int accuracy = 4);
     static std::string doubleToString(double number, unsigned int accuracy = 4);
+    static std::string vectorToString(const std::vector<std::string>& vString, bool hasQuoteMark = false);
+    static std::string vectorToString(const std::vector<std::string>& vString, const std::vector<std::string>& format);
     static std::vector<int> hexToColor(std::string hex);
     static std::string colorToHex(int red, int green, int blue);
     static std::string colorToHex(const std::vector<int>& color);

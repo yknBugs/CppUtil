@@ -74,10 +74,14 @@ void Display::changeCursor(char c)
     else if (c < 0)
     {
         specialCharCursor++;
+#ifdef _WIN32
+        cursorPosition.X++;
+#else
         if (specialCharCursor % 3 != 0)
         {
             cursorPosition.X++;
         }
+#endif
     }
     else
     {
@@ -664,23 +668,16 @@ void Display::showText(const std::string& text)
 
 void Display::showText(const std::string& text, const std::vector<std::string>& parameters)
 {
-    size_t bufferSize = text.size() + 2;
-    char* buffer = new char[bufferSize];
-    memset(buffer, '\0', bufferSize);
-
+    std::string buffer;
     int inputTextIndex = 0;
-    int bufferIndex = 0;
     int parameterIndex = 0;
     while (text[inputTextIndex] != '\0')
     {
         if (text[inputTextIndex] == '#')
         {
             // show text before '#'
-            buffer[bufferIndex] = '\0';
-            std::string temp(buffer);
-            this->showText(temp);
-            memset(buffer, '\0', bufferSize);
-            bufferIndex = 0;
+            this->showText(buffer);
+            buffer.clear();
             // show parameters
             if (parameterIndex < parameters.size())
             {
@@ -694,17 +691,13 @@ void Display::showText(const std::string& text, const std::vector<std::string>& 
         }
         else
         {
-            buffer[bufferIndex] = text[inputTextIndex];
-            bufferIndex++;
+            buffer += text[inputTextIndex];
         }
         inputTextIndex++;
     }
 
     // show text after the last '#'
-    buffer[bufferIndex] = '\0';
-    std::string temp(buffer);
-    this->showText(temp);
-    delete[] buffer;
+    this->showText(buffer);
 }
 
 void Display::showText(const std::string& text, const std::vector<int>& parameters)
@@ -969,12 +962,12 @@ double Display::getInputDouble(bool canBelowZero, bool acceptNaN, size_t maxLeng
         }
         else if (c == 'n')
         {
-            result = 0.0 / 0.0;
+            result = std::nan("");
             break;
         }
         else if (c == 'i')
         {
-            result = 1.0 / 0.0;
+            result = std::numeric_limits<double>::infinity();
             break;
         }
     }
@@ -1146,6 +1139,52 @@ std::string Display::doubleToString(double number, unsigned int accuracy)
     std::ostringstream oss;
     oss << std::fixed << std::setprecision(accuracy) << number;
     return oss.str();
+}
+
+std::string Display::vectorToString(const std::vector<std::string>& vString, bool hasQuoteMark)
+{
+    std::vector<std::string> format = { "{ ", "", "", ", ", " }" };
+    if (hasQuoteMark)
+    {
+        format[1] = "\"";
+        format[2] = "\"";
+    }
+    return vectorToString(vString, format);
+}
+
+std::string Display::vectorToString(const std::vector<std::string>& vString, const std::vector<std::string>& format)
+{
+    // format = { prefix, open bracket, close bracket, split char, suffix }
+    // missing format will be regarded as empty string 
+    std::string result = "";
+    if (format.size() > 0)
+    {
+        result += format[0];
+    }
+    for (size_t i = 0; i < vString.size(); i++)
+    {
+        if (format.size() > 1)
+        {
+            result += format[1];
+        }
+        result += vString[i];
+        if (format.size() > 2)
+        {
+            result += format[2];
+        }
+        if (i < vString.size() - 1)
+        {
+            if (format.size() > 3)
+            {
+                result += format[3];
+            }
+        }
+    }
+    if (format.size() > 4)
+    {
+        result += format[4];
+    }
+    return result;
 }
 
 std::vector<int> Display::hexToColor(std::string hex)
