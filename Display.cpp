@@ -40,6 +40,7 @@ char Display::c()
 void Display::changeCursor(char c)
 {
     // Note: This functions is platform-independent, but it may not be accurate
+    // Warning: Unknown Characters may exist
     std::lock_guard<std::mutex> lock(mtx);
     if (c == '\n')
     {
@@ -88,16 +89,15 @@ void Display::changeCursor(char c)
         specialCharCursor = 0;
         cursorPosition.X++;
     }
-    // Warning: Unknown Characters may exist
 }
 
 void Display::changeCursor(const std::string& text)
 {
+    // Warning: This is just a guess, not the actual cursor position
     for (char c : text)
     {
         changeCursor(c);
     }
-    // Warning: This is just a guess, not the actual cursor position
 }
 
 bool Display::updateCursorPosition()
@@ -241,6 +241,7 @@ bool Display::inputIsFnRightArrow(const std::vector<char>& input)
 
 bool Display::inputIsControlChar(const std::vector<char>& input)
 {
+    // WARNING: Unknown Control Characters may exist
     if (input[0] >= 0 && input[0] <= 31)
     {
         return true;
@@ -254,9 +255,11 @@ bool Display::inputIsControlChar(const std::vector<char>& input)
     return false;
 }
 
-int Display::previewGetInputString(COORD originalPosition, std::string originalColor, std::string& inputString, int cursorIndex, int lastVisibleLength)
+int Display::previewGetInputString(const std::string originalColor, const std::string& inputString, int cursorIndex, int* lastAccurateCursorIndex, int lastVisibleLength)
 {
-    setCursorPosition(originalPosition);
+    // Note: "&+ColorCode" will only be displayed when the cursor is near them
+    std::cout << std::string(*lastAccurateCursorIndex, '\b') << std::string(lastVisibleLength, ' ') << std::string(lastVisibleLength, '\b');
+    // Show Text
     setTextColor(originalColor);
     int i = 0;
     int x = 0;
@@ -346,11 +349,12 @@ int Display::previewGetInputString(COORD originalPosition, std::string originalC
     }
 #endif
 
-    for (int i = 0; i < lastVisibleLength - visibleLength; i++)
+    // Set cursor position to originalCursorPosition.X + x
+    if (x < visibleLength)
     {
-        std::cout << ' ';
+        std::cout << std::string(visibleLength - x, '\b');
     }
-    setCursorPosition(originalPosition.X + x, originalPosition.Y);
+    *lastAccurateCursorIndex = x;
     return visibleLength;
 }
 
@@ -368,7 +372,7 @@ Display::~Display()
 
 bool Display::setTextColor(char colorCode)
 {
-    // Based on the windows platform behavior
+    // Note: Based on the windows platform behavior
 #ifdef _WIN32
     HANDLE hConsole = GetStdHandle(STD_OUTPUT_HANDLE);
     if (colorCode >= '0' && colorCode <= '9')
@@ -429,7 +433,7 @@ bool Display::setTextColor(char colorCode)
 
 bool Display::setTextColor(int red, int green, int blue)
 {
-    // Some console may not support RGB color
+    // Note: Some console may not support RGB color
     if (red < 0 || red > 255 || green < 0 || green > 255 || blue < 0 || blue > 255)
     {
         return false;
@@ -486,7 +490,7 @@ std::vector<char> Display::getInput()
     return result;
     */
 
-    // In different platform, Display::c() may return different result for the same input
+    // Note: In different platform, Display::c() may return different result for the same input
     // Some input may have 2 ascii or more, this function will connect those ascii that should be regarded as 1 single input
     // WARNING: This function just handles the most common cases, for unknown cases, it will not connect the ascii
     std::vector<char> result;
@@ -549,6 +553,7 @@ void Display::clear()
 
 void Display::clear(size_t length, COORD position, char c, bool freezeCursor)
 {
+    // Note: require accurate cursor position if freezeCursor is true
     COORD originalPosition = getCursorPosition();
     setCursorPosition(position);
     for (size_t i = 0; i < length; i++)
@@ -578,39 +583,50 @@ void Display::print(const std::string& text)
 
 void Display::print(const std::string& text, int red, int green, int blue, bool resetColor)
 {
-    this->setTextColor(red, green, blue);
-    std::cout << text;
-    this->changeCursor(text);
-    this->updateCursorPosition();
+    std::string clr = getCursorColor();
+    bool isColorValid = this->setTextColor(red, green, blue);
+    if (isColorValid == false)
+    {
+        // Not a valid color, using default color
+        this->setTextColor('r');
+    }
+    print(text);
     if (resetColor)
     {
-        this->setTextColor('r');
+        this->setTextColor(clr);
     }
 }
 
 void Display::print(const std::string& text, const std::vector<int>& color, bool resetColor)
 {
-    if (color.size() != 3)
+    std::string clr = getCursorColor();
+    bool isColorValid = this->setTextColor(color);
+    if (isColorValid == false)
     {
         // Not a valid color, using default color
         this->setTextColor('r');
-        print(text);
-        return;
     }
-    print(text, color[0], color[1], color[2], resetColor);
+    print(text);
+    if (resetColor)
+    {
+        this->setTextColor(clr);
+    }
 }
 
 void Display::print(const std::string& text, std::string color, bool resetColor)
 {
-    std::vector<int> vColor = hexToColor(color);
-    if (vColor[0] == -1 || vColor[1] == -1 || vColor[2] == -1)
+    std::string clr = getCursorColor();
+    bool isColorValid = this->setTextColor(color);
+    if (isColorValid == false)
     {
         // Not a valid color, using default color
         this->setTextColor('r');
-        print(text);
-        return;
     }
-    print(text, vColor, resetColor);
+    print(text);
+    if (resetColor)
+    {
+        this->setTextColor(clr);
+    }
 }
 
 void Display::showText(char c, char colorCode)
@@ -741,7 +757,6 @@ int Display::getInputInt(int max, bool canBelowZero)
     int maxLength = 0;
     int temp = 0;
     std::vector<char> cstr;
-    COORD position = getCursorPosition();
 
     // Get the maximum length of the input
     temp = max;
@@ -785,8 +800,8 @@ int Display::getInputInt(int max, bool canBelowZero)
             if (result > max / 10 || (result == max / 10 && cstr[0] - '0' > max % 10))
             {
                 // Input is too large, replace the input with the maximum value
-                this->clear(length, position);
-                setCursorPosition(position);
+                size_t visibleLength = length + (isBelowZero ? 1 : 0);
+                std::cout << std::string(visibleLength, '\b') << std::string(visibleLength, ' ') << std::string(visibleLength, '\b');
                 if (isBelowZero == true)
                 {
                     std::cout << -max;
@@ -815,8 +830,7 @@ int Display::getInputInt(int max, bool canBelowZero)
         cstr = getInput();
     }
 
-    std::cout << '\n';
-    setCursorPosition(0, position.Y + 1);
+    this->print("\n");
     updateCursorPosition();
     if (isBelowZero == true)
     {
@@ -832,7 +846,6 @@ double Display::getInputDouble(bool canBelowZero, bool acceptNaN, size_t maxLeng
     bool isNaN = false;
     int length = 0;
     std::vector<char> cstr;
-    COORD position = getCursorPosition();
     double result = 0.0;
     double decResult = 1.0;
     std::vector<char> input;
@@ -902,14 +915,14 @@ double Display::getInputDouble(bool canBelowZero, bool acceptNaN, size_t maxLeng
             input.push_back('.');
             hasDot = true;
         }
-        else if (cstr.size() == 1 && cstr[0] == 'n' && isNaN == false && acceptNaN == true && length == 0 && isBelowZero == false && hasDot == false)
+        else if (cstr.size() == 1 && (cstr[0] == 'n' || cstr[0] == 'N') && isNaN == false && acceptNaN && length == 0 && isBelowZero == false && hasDot == false)
         {
             // Handle NaN
             std::cout << "NaN";
             input.push_back('n');
             isNaN = true;
         }
-        else if (cstr.size() == 1 && cstr[0] == 'i' && isNaN == false && acceptNaN == true && length == 0 && hasDot == false)
+        else if (cstr.size() == 1 && (cstr[0] == 'i' || cstr[0] == 'I') && isNaN == false && acceptNaN && length == 0 && hasDot == false)
         {
             // Handle Infinity
             std::cout << "Infinity";
@@ -977,13 +990,12 @@ double Display::getInputDouble(bool canBelowZero, bool acceptNaN, size_t maxLeng
         result = -result;
     }
 
-    std::cout << '\n';
-    setCursorPosition(0, position.Y + 1);
+    this->print("\n");
     updateCursorPosition();
     return result;
 }
 
-std::string Display::getInputString(size_t minLength, size_t maxLength)
+std::string Display::getInputText(size_t minLength, size_t maxLength)
 {
     std::string result = "";
     std::string asciiLabel = "";
@@ -991,7 +1003,7 @@ std::string Display::getInputString(size_t minLength, size_t maxLength)
     std::vector<char> cstr;
     int length = 0;
     int lastVisibleLength = 0;
-    COORD position = getCursorPosition();
+    int accurateCursorIndex = 0;
     std::string color = getCursorColor();
 
     cstr = getInput();
@@ -1017,7 +1029,7 @@ std::string Display::getInputString(size_t minLength, size_t maxLength)
                         break;
                     }
                 }
-                lastVisibleLength = previewGetInputString(position, color, result, cursorIndex, lastVisibleLength);
+                lastVisibleLength = previewGetInputString(color, result, cursorIndex, &accurateCursorIndex, lastVisibleLength);
             }
         }
         else if (cstr.size() == 1 && cstr[0] == '\t')
@@ -1029,7 +1041,7 @@ std::string Display::getInputString(size_t minLength, size_t maxLength)
                 asciiLabel.insert(cursorIndex, 4, '1');
                 length += 4;
                 cursorIndex += 4;
-                lastVisibleLength = previewGetInputString(position, color, result, cursorIndex, lastVisibleLength);
+                lastVisibleLength = previewGetInputString(color, result, cursorIndex, &accurateCursorIndex, lastVisibleLength);
             }
         }
         else if (inputIsLeftArrow(cstr))
@@ -1049,7 +1061,7 @@ std::string Display::getInputString(size_t minLength, size_t maxLength)
                         break;
                     }
                 }
-                lastVisibleLength = previewGetInputString(position, color, result, cursorIndex, lastVisibleLength);
+                lastVisibleLength = previewGetInputString(color, result, cursorIndex, &accurateCursorIndex, lastVisibleLength);
             }
         }
         else if (inputIsRightArrow(cstr))
@@ -1069,29 +1081,24 @@ std::string Display::getInputString(size_t minLength, size_t maxLength)
                         break;
                     }
                 }
-                lastVisibleLength = previewGetInputString(position, color, result, cursorIndex, lastVisibleLength);
+                lastVisibleLength = previewGetInputString(color, result, cursorIndex, &accurateCursorIndex, lastVisibleLength);
             }
         }
         else if (inputIsUpArrow(cstr) || inputIsFnLeftArrow(cstr))
         {
             // begin
             cursorIndex = 0;
-            lastVisibleLength = previewGetInputString(position, color, result, cursorIndex, lastVisibleLength);
+            lastVisibleLength = previewGetInputString(color, result, cursorIndex, &accurateCursorIndex, lastVisibleLength);
         }
         else if (inputIsDownArrow(cstr) || inputIsFnRightArrow(cstr))
         {
             // end
             cursorIndex = length;
-            lastVisibleLength = previewGetInputString(position, color, result, cursorIndex, lastVisibleLength);
+            lastVisibleLength = previewGetInputString(color, result, cursorIndex, &accurateCursorIndex, lastVisibleLength);
         }
-        else if (length < maxLength && inputIsControlChar(cstr) == false)
+        else if (length + cstr.size() <= maxLength && inputIsControlChar(cstr) == false)
         {
             // Handle printable characters
-            if (length > maxLength - cstr.size())
-            {
-                cstr = getInput();
-                continue;
-            }
             for (int i = 0; i < cstr.size(); i++)
             {
                 result.insert(cursorIndex, 1, cstr[i]);
@@ -1099,15 +1106,51 @@ std::string Display::getInputString(size_t minLength, size_t maxLength)
                 length++;
                 cursorIndex++;
             }
-            lastVisibleLength = previewGetInputString(position, color, result, cursorIndex, lastVisibleLength);
+            lastVisibleLength = previewGetInputString(color, result, cursorIndex, &accurateCursorIndex, lastVisibleLength);
         }
         cstr = getInput();
     }
 
-    previewGetInputString(position, color, result, -10, lastVisibleLength);
-    std::cout << '\n';
-    setCursorPosition(0, position.Y + 1);
+    // Make sure no "&+ColorCode" is displayed
+    previewGetInputString(color, result, -10, &accurateCursorIndex, lastVisibleLength);
+    print("\n");
     setTextColor(color);
+    updateCursorPosition();
+    return result;
+}
+
+std::string Display::getInputString(std::string whitelistChar, std::string defaultValue, size_t minLength, size_t maxLength)
+{
+    std::string result = defaultValue;
+    std::vector<char> cstr;
+    size_t length = result.size();
+
+    std::cout << result;
+    cstr = getInput();
+    while (inputIsEnter(cstr) == false || length < minLength)
+    {
+        if (inputIsBackspace(cstr))
+        {
+            if (length > 0)
+            {
+                length--;
+                result.pop_back();
+                std::cout << '\b' << ' ' << '\b';
+            }
+        }
+        else if (inputIsControlChar(cstr) == false && cstr.size() == 1 && length < maxLength)
+        {
+            if (whitelistChar.size() == 0 || whitelistChar.find(cstr[0]) != std::string::npos)
+            {
+                result += cstr[0];
+                length++;
+                std::cout << cstr[0];
+            }
+        }
+        cstr = getInput();
+    }
+
+    this->print("\n");
     updateCursorPosition();
     return result;
 }
