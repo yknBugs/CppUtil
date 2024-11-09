@@ -38,7 +38,7 @@ private:
     // current cursor color
     static std::string cursorColor;
     // handle unicode characters
-    static int specialCharCursor;
+    static size_t specialCharCursor;
     // record the start time to support timing function
     std::chrono::system_clock::time_point startTime;
 
@@ -74,7 +74,9 @@ private:
 
     // Common algorithm
     // Called by getInputText to preview the input string with color support and update cursor position, return the visible length of the string
-    int previewGetInputString(const std::string originalColor, const std::string& inputString, int cursorIndex, int* lastAccurateCursorIndex, int lastVisibleLength);
+    size_t previewGetInputString(const std::string oClr, const std::string& iStr, size_t cIdx, size_t* lAcuIdx, size_t lVisLen, bool allowClr);
+    // Called by createText to print a single character to the proper position, return false if there is not enough space
+    bool printCharToProperPosition(char c, COORD topleft, COORD bottomright, bool wideCharPredict);
 
 public:
     // You need to create an instance if you want to use this class to print text to the console
@@ -110,7 +112,7 @@ public:
     void print(const std::string& text, std::string color, bool resetColor = true);
 
     // Show text to the terminal, use "&+Number" to change the color, use "#" to be a placeholder for parameters
-    // Print a single char with specific color
+    // Print a single char with specific color, color will not be reset after printing
     void showText(char c, char colorCode = 'r');
     // Print text to the terminal, use "&+ColorCode" to change the text color after them
     void showText(const std::string& text);
@@ -127,13 +129,19 @@ public:
     // Print text as "text1 + parameter + text2", Use "&+ColorCode" to change the text color
     void showText(const std::string& text1, double parameter, const std::string& text2, unsigned int accuracy = 4);
 
+    // Draw text to a certain area in the console, use "&+Number" to change the color
+    // Fill a specific area with a signle character. The cursor will jump to the original position if freezeCursor is true
+    void createText(char c, COORD topleft, COORD bottomright, bool freezeCursor = true);
+    // Print a text to a specific area in the console, set wideCharPredict to true to make sure 2-character-wide unicode characters not exceed the boundary
+    void createText(const std::string& text, COORD topleft, COORD bottomright, bool wideCharPredict = true, bool freezeCursor = true);
+
     // User Input
     // Get an integer input from the console, set canBelowZero to true to accept negative numbers
     int getInputInt(int max = 2147483647, bool canBelowZero = true);
     // Get a double input from the console, set canBelowZero to false to reject negative numbers, set acceptNaN to true to accept NaN and Infinity
     double getInputDouble(bool canBelowZero = true, bool acceptNaN = false, size_t maxLength = 18446744073709551615ULL);
     // Get a string text input from the console, support "&+ColorCode" to change the text color, support unicode characters
-    std::string getInputText(size_t minLength = 0, size_t maxLength = 18446744073709551615ULL);
+    std::string getInputText(size_t minLength = 0, size_t maxLength = 18446744073709551615ULL, bool allowColor = true);
     // Get a string input from the console, doesn't support unicode characters and color code, leave whitelistChar empty to accept all ascii characters
     std::string getInputString(std::string whitelistChar = "", std::string defaultValue = "", size_t minLength = 0, size_t maxLength = 18446744073709551615ULL);
 
@@ -163,9 +171,9 @@ public:
     // Get cursor position, may not be accurate (especially in non-Windows platform)
     static COORD getCursorPosition();
     // Get cursor position X (Column)
-    static int getCursorPositionX();
+    static short getCursorPositionX();
     // Get cursor position Y (Line)
-    static int getCursorPositionY();
+    static short getCursorPositionY();
     // Get current cursor color, can be a color code or an RGB color
     static std::string getCursorColor();
 

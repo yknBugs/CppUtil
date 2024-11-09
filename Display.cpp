@@ -3,7 +3,7 @@
 std::mutex Display::mtx;
 COORD Display::cursorPosition = { 0, 0 };
 std::string Display::cursorColor = "r";
-int Display::specialCharCursor = 0;
+size_t Display::specialCharCursor = 0;
 
 char Display::c()
 {
@@ -84,10 +84,14 @@ void Display::changeCursor(char c)
         }
 #endif
     }
-    else
+    else if (c >= 32 && c <= 126)
     {
         specialCharCursor = 0;
         cursorPosition.X++;
+    }
+    else
+    {
+        specialCharCursor = 0;
     }
 }
 
@@ -255,19 +259,19 @@ bool Display::inputIsControlChar(const std::vector<char>& input)
     return false;
 }
 
-int Display::previewGetInputString(const std::string originalColor, const std::string& inputString, int cursorIndex, int* lastAccurateCursorIndex, int lastVisibleLength)
+size_t Display::previewGetInputString(const std::string oClr, const std::string& iStr, size_t cIdx, size_t* lAcuIdx, size_t lVisLen, bool allowClr)
 {
     // Note: "&+ColorCode" will only be displayed when the cursor is near them
-    std::cout << std::string(*lastAccurateCursorIndex, '\b') << std::string(lastVisibleLength, ' ') << std::string(lastVisibleLength, '\b');
+    std::cout << std::string(*lAcuIdx, '\b') << std::string(lVisLen, ' ') << std::string(lVisLen, '\b');
     // Show Text
-    setTextColor(originalColor);
-    int i = 0;
-    int x = 0;
-    int visibleLength = 0;
+    setTextColor(oClr);
+    size_t i = 0;
+    size_t x = 0;
+    size_t visibleLength = 0;
     bool isColorChar = false;
-    while (inputString[i] != '\0')
+    while (iStr[i] != '\0')
     {
-        if (inputString[i] == '&' && isColorChar == false)
+        if (iStr[i] == '&' && isColorChar == false && allowClr)
         {
             isColorChar = true;
             i++;
@@ -276,17 +280,17 @@ int Display::previewGetInputString(const std::string originalColor, const std::s
 
         if (isColorChar)
         {
-            bool setColorResult = this->setTextColor(inputString[i]);
-            if (cursorIndex >= i - 1 && cursorIndex <= i + 1)
+            bool setColorResult = this->setTextColor(iStr[i]);
+            if (cIdx >= i - 1 && cIdx <= i + 1)
             {
                 // Current Cursor near the color character, force show the color character
-                std::cout << "&" << inputString[i];
+                std::cout << "&" << iStr[i];
                 visibleLength += 2;
-                if (cursorIndex == i)
+                if (cIdx == i)
                 {
                     x++;
                 }
-                else if (cursorIndex > i)
+                else if (cIdx > i)
                 {
                     x += 2;
                 }
@@ -294,13 +298,13 @@ int Display::previewGetInputString(const std::string originalColor, const std::s
             else if (setColorResult == false)
             {
                 // Failed to match any color, show the original character
-                std::cout << "&" << inputString[i];
+                std::cout << "&" << iStr[i];
                 visibleLength += 2;
-                if (cursorIndex == i)
+                if (cIdx == i)
                 {
                     x++;
                 }
-                else if (cursorIndex > i)
+                else if (cIdx > i)
                 {
                     x += 2;
                 }
@@ -311,9 +315,9 @@ int Display::previewGetInputString(const std::string originalColor, const std::s
             continue;
         }
 
-        std::cout << inputString[i];
+        std::cout << iStr[i];
         visibleLength++;
-        if (i < cursorIndex)
+        if (i < cIdx)
         {
             x++;
         }
@@ -325,7 +329,7 @@ int Display::previewGetInputString(const std::string originalColor, const std::s
     {
         std::cout << "&";
         visibleLength++;
-        if (cursorIndex == i)
+        if (cIdx == i)
         {
             x++;
         }
@@ -334,11 +338,11 @@ int Display::previewGetInputString(const std::string originalColor, const std::s
 #ifndef _WIN32
     // In Linux, Unicode characters have 3 values but take only 2 character spaces
     i = 0;
-    while (inputString[i] != '\0')
+    while (iStr[i] != '\0')
     {
-        if (inputString[i] < 0)
+        if (iStr[i] < 0)
         {
-            if (i < cursorIndex)
+            if (i < cIdx)
             {
                 x--;
             }
@@ -354,8 +358,118 @@ int Display::previewGetInputString(const std::string originalColor, const std::s
     {
         std::cout << std::string(visibleLength - x, '\b');
     }
-    *lastAccurateCursorIndex = x;
+    *lAcuIdx = x;
     return visibleLength;
+}
+
+bool Display::printCharToProperPosition(char c, COORD topleft, COORD bottomright, bool wideCharPredict)
+{
+    COORD position = getCursorPosition();
+    // Handle Control Characters
+    if (c == '\0')
+    {
+        return false;
+    }
+    if (c == '\r')
+    {
+        setCursorPosition(topleft.X, position.Y);
+        return true;
+    }
+    if (c == '\n')
+    {
+        setCursorPosition(topleft.X, position.Y + 1);
+        return true;
+    }
+    if (c == '\b')
+    {
+        std::cout << '\b';
+        changeCursor(c);
+        updateCursorPosition();
+        return true;
+    }
+
+    // Go to the next line if current position is out of the boundary
+#ifdef _WIN32
+    if ((c < 0 && specialCharCursor % 2 == 0) || (c >= 32 && c <= 126) || c == '\t')
+#else
+    if ((c < 0 && specialCharCursor % 3 == 0) || (c >= 32 && c <= 126) || c == '\t')
+#endif
+    {
+        if (position.X > bottomright.X)
+        {
+            if (position.Y >= bottomright.Y)
+            {
+                return false;
+            }
+            setCursorPosition(topleft.X, position.Y + 1);
+            position = getCursorPosition();
+        }
+    }
+
+    if (c == '\t')
+    {
+        std::cout << ' ';
+        changeCursor(' ');
+        position = getCursorPosition();
+        while (position.X - topleft.X % 8 != 0)
+        {
+            if (position.X > bottomright.X)
+            {
+                if (position.Y >= bottomright.Y)
+                {
+                    return false;
+                }
+                break;
+            }
+            std::cout << ' ';
+            changeCursor(' ');
+            position = getCursorPosition();
+        }
+        return true;
+    }
+
+    // Handle Unicode Characters
+    if (c < 0)
+    {
+#ifdef _WIN32
+        if (specialCharCursor % 2 == 0)
+#else
+        if (specialCharCursor % 3 == 0)
+#endif
+        {
+            // If the input is estimated to be out of boundary, go to the next line, the input may never be printed if the width is too narrow
+            while (wideCharPredict && position.X >= bottomright.X)
+            {
+                if (position.Y >= bottomright.Y)
+                {
+                    return false;
+                }
+                setCursorPosition(topleft.X, position.Y + 1);
+                position = getCursorPosition();
+            }
+        }
+        std::cout << c;
+        changeCursor(c);
+#ifdef _WIN32
+        if (specialCharCursor % 2 == 0)
+#else
+        if (specialCharCursor % 3 == 0)
+#endif
+        {
+            updateCursorPosition();
+        }
+        return true;
+    }
+
+    if (c >= 32 && c <= 126)
+    {
+        std::cout << c;
+        changeCursor(c);
+        updateCursorPosition();
+        return true;
+    }
+
+    return true;
 }
 
 Display::Display()
@@ -639,7 +753,7 @@ void Display::showText(char c, char colorCode)
 
 void Display::showText(const std::string& text)
 {
-    int i = 0;
+    size_t i = 0;
     bool isColorChar = false;
 
     while (text[i] != '\0')
@@ -685,8 +799,8 @@ void Display::showText(const std::string& text)
 void Display::showText(const std::string& text, const std::vector<std::string>& parameters)
 {
     std::string buffer;
-    int inputTextIndex = 0;
-    int parameterIndex = 0;
+    size_t inputTextIndex = 0;
+    size_t parameterIndex = 0;
     while (text[inputTextIndex] != '\0')
     {
         if (text[inputTextIndex] == '#')
@@ -747,6 +861,93 @@ void Display::showText(const std::string& text1, double parameter, const std::st
     this->showText(text1);
     this->print(doubleToString(parameter, accuracy));
     this->showText(text2);
+}
+
+void Display::createText(char c, COORD topleft, COORD bottomright, bool freezeCursor)
+{
+    if (topleft.X > bottomright.X || topleft.Y > bottomright.Y)
+    {
+        return;
+    }
+    if (c == '\t' || c == '\n' || c == '\r' || c == '\b')
+    {
+        c = ' ';
+    }
+    COORD originalPosition = getCursorPosition();
+    setCursorPosition(topleft);
+    for (short y = 0; y <= bottomright.Y - topleft.Y; y++)
+    {
+        std::cout << std::string(bottomright.X - topleft.X + 1, c);
+        setCursorPosition(topleft.X, topleft.Y + y + 1);
+    }
+    if (freezeCursor)
+    {
+        setCursorPosition(originalPosition);
+    }
+}
+
+void Display::createText(const std::string& text, COORD topleft, COORD bottomright, bool wideCharPredict, bool freezeCursor)
+{
+    if (topleft.X > bottomright.X || topleft.Y > bottomright.Y)
+    {
+        return;
+    }
+
+    COORD originalPosition = getCursorPosition();
+    setCursorPosition(topleft);
+    size_t i = 0;
+    bool isColorChar = false;
+    bool isFinished = false;
+
+    while (text[i] != '\0')
+    {
+        if (text[i] == '&' && isColorChar == false)
+        {
+            isColorChar = true;
+            i++;
+            continue;
+        }
+
+        if (isColorChar)
+        {
+            bool setColorResult = this->setTextColor(text[i]);
+            if (setColorResult == false)
+            {
+                // Failed to match any color, show the original character
+                if (this->printCharToProperPosition('&', topleft, bottomright, wideCharPredict) == false)
+                {
+                    isFinished = true;
+                    break;
+                }
+                if (this->printCharToProperPosition(text[i], topleft, bottomright, wideCharPredict) == false)
+                {
+                    isFinished = true;
+                    break;
+                }
+            }
+
+            isColorChar = false;
+            i++;
+            continue;
+        }
+
+        if (this->printCharToProperPosition(text[i], topleft, bottomright, wideCharPredict) == false)
+        {
+            isFinished = true;
+            break;
+        }
+        i++;
+    }
+
+    // String ending with character '&'
+    if (isColorChar && isFinished == false)
+    {
+        this->printCharToProperPosition('&', topleft, bottomright, wideCharPredict);
+    }
+    if (freezeCursor)
+    {
+        setCursorPosition(originalPosition);
+    }
 }
 
 int Display::getInputInt(int max, bool canBelowZero)
@@ -844,7 +1045,7 @@ double Display::getInputDouble(bool canBelowZero, bool acceptNaN, size_t maxLeng
     bool isBelowZero = false;
     bool hasDot = false;
     bool isNaN = false;
-    int length = 0;
+    size_t length = 0;
     std::vector<char> cstr;
     double result = 0.0;
     double decResult = 1.0;
@@ -995,15 +1196,15 @@ double Display::getInputDouble(bool canBelowZero, bool acceptNaN, size_t maxLeng
     return result;
 }
 
-std::string Display::getInputText(size_t minLength, size_t maxLength)
+std::string Display::getInputText(size_t minLength, size_t maxLength, bool allowColor)
 {
     std::string result = "";
     std::string asciiLabel = "";
-    int cursorIndex = 0;
+    size_t cursorIndex = 0;
     std::vector<char> cstr;
-    int length = 0;
-    int lastVisibleLength = 0;
-    int accurateCursorIndex = 0;
+    size_t length = 0;
+    size_t lastVisibleLength = 0;
+    size_t accurateCursorIndex = 0;
     std::string color = getCursorColor();
 
     cstr = getInput();
@@ -1029,7 +1230,7 @@ std::string Display::getInputText(size_t minLength, size_t maxLength)
                         break;
                     }
                 }
-                lastVisibleLength = previewGetInputString(color, result, cursorIndex, &accurateCursorIndex, lastVisibleLength);
+                lastVisibleLength = previewGetInputString(color, result, cursorIndex, &accurateCursorIndex, lastVisibleLength, allowColor);
             }
         }
         else if (cstr.size() == 1 && cstr[0] == '\t')
@@ -1041,7 +1242,7 @@ std::string Display::getInputText(size_t minLength, size_t maxLength)
                 asciiLabel.insert(cursorIndex, 4, '1');
                 length += 4;
                 cursorIndex += 4;
-                lastVisibleLength = previewGetInputString(color, result, cursorIndex, &accurateCursorIndex, lastVisibleLength);
+                lastVisibleLength = previewGetInputString(color, result, cursorIndex, &accurateCursorIndex, lastVisibleLength, allowColor);
             }
         }
         else if (inputIsLeftArrow(cstr))
@@ -1061,7 +1262,7 @@ std::string Display::getInputText(size_t minLength, size_t maxLength)
                         break;
                     }
                 }
-                lastVisibleLength = previewGetInputString(color, result, cursorIndex, &accurateCursorIndex, lastVisibleLength);
+                lastVisibleLength = previewGetInputString(color, result, cursorIndex, &accurateCursorIndex, lastVisibleLength, allowColor);
             }
         }
         else if (inputIsRightArrow(cstr))
@@ -1081,38 +1282,38 @@ std::string Display::getInputText(size_t minLength, size_t maxLength)
                         break;
                     }
                 }
-                lastVisibleLength = previewGetInputString(color, result, cursorIndex, &accurateCursorIndex, lastVisibleLength);
+                lastVisibleLength = previewGetInputString(color, result, cursorIndex, &accurateCursorIndex, lastVisibleLength, allowColor);
             }
         }
         else if (inputIsUpArrow(cstr) || inputIsFnLeftArrow(cstr))
         {
             // begin
             cursorIndex = 0;
-            lastVisibleLength = previewGetInputString(color, result, cursorIndex, &accurateCursorIndex, lastVisibleLength);
+            lastVisibleLength = previewGetInputString(color, result, cursorIndex, &accurateCursorIndex, lastVisibleLength, allowColor);
         }
         else if (inputIsDownArrow(cstr) || inputIsFnRightArrow(cstr))
         {
             // end
             cursorIndex = length;
-            lastVisibleLength = previewGetInputString(color, result, cursorIndex, &accurateCursorIndex, lastVisibleLength);
+            lastVisibleLength = previewGetInputString(color, result, cursorIndex, &accurateCursorIndex, lastVisibleLength, allowColor);
         }
         else if (length + cstr.size() <= maxLength && inputIsControlChar(cstr) == false)
         {
             // Handle printable characters
-            for (int i = 0; i < cstr.size(); i++)
+            for (size_t i = 0; i < cstr.size(); i++)
             {
                 result.insert(cursorIndex, 1, cstr[i]);
                 asciiLabel.insert(cursorIndex, 1, '0' + (char)cstr.size());
                 length++;
                 cursorIndex++;
             }
-            lastVisibleLength = previewGetInputString(color, result, cursorIndex, &accurateCursorIndex, lastVisibleLength);
+            lastVisibleLength = previewGetInputString(color, result, cursorIndex, &accurateCursorIndex, lastVisibleLength, allowColor);
         }
         cstr = getInput();
     }
 
     // Make sure no "&+ColorCode" is displayed
-    previewGetInputString(color, result, -10, &accurateCursorIndex, lastVisibleLength);
+    previewGetInputString(color, result, -10, &accurateCursorIndex, lastVisibleLength, allowColor);
     print("\n");
     setTextColor(color);
     updateCursorPosition();
@@ -1330,12 +1531,12 @@ COORD Display::getCursorPosition()
     return cursorPosition;
 }
 
-int Display::getCursorPositionX()
+short Display::getCursorPositionX()
 {
     return getCursorPosition().X;
 }
 
-int Display::getCursorPositionY()
+short Display::getCursorPositionY()
 {
     return getCursorPosition().Y;
 }
