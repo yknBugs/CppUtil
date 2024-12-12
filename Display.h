@@ -137,13 +137,13 @@ public:
 
     // User Input
     // Get an integer input from the console, set canBelowZero to true to accept negative numbers
-    int getInputInt(int max = 2147483647, bool canBelowZero = true);
+    int getInputInt(int max = INT_MAX, bool canBelowZero = true);
     // Get a double input from the console, set canBelowZero to false to reject negative numbers, set acceptNaN to true to accept NaN and Infinity
-    double getInputDouble(bool canBelowZero = true, bool acceptNaN = false, size_t maxLength = 18446744073709551615ULL);
+    double getInputDouble(bool canBelowZero = true, bool acceptNaN = false, size_t maxLength = SIZE_MAX);
     // Get a string text input from the console, support "&+ColorCode" to change the text color, support unicode characters
-    std::string getInputText(size_t minLength = 0, size_t maxLength = 18446744073709551615ULL, bool allowColor = true);
+    std::string getInputText(size_t minLength = 0, size_t maxLength = SIZE_MAX, bool allowColor = true);
     // Get a string input from the console, doesn't support unicode characters and color code, leave whitelistChar empty to accept all ascii characters
-    std::string getInputString(std::string whitelistChar = "", std::string defaultValue = "", size_t minLength = 0, size_t maxLength = 18446744073709551615ULL);
+    std::string getInputString(std::string whitelistChar = "", std::string defaultValue = "", size_t minLength = 0, size_t maxLength = SIZE_MAX);
 
     // Update vector data type
     // Convert a vector of int to a vector of string
